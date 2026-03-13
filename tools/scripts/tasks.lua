@@ -34,7 +34,7 @@ do
                                                                                             "    - ext4",
                                                                                             "    - fat",
                                                                                             "    - cromfs"},
-            {"s",   "size",             "kv",   "256M",                                     "image size"},
+            {"s",   "size",             "kv",   "64M",                                     "image size"},
             {"o",   "output",           "kv",   nil,                                        "output image dir"},
             {"r",   "rootfs",           "kv",   nil,                                        "rootfs dir"},
         }

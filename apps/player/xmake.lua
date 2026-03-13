@@ -10,5 +10,6 @@ do
     add_packages("sdl2")
     add_packages("sdl2_image")
     add_packages("ffmpeg")
+    add_links("SDL2","SDL2main", "SDL2_test")
 end
 target_end()

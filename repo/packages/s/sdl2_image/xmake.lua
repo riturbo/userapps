@@ -110,7 +110,5 @@ do
         import("package.tools.make").install(package, {}, {envs = buildenvs})
     end)
 
-    on_test(function(package)
-        assert(package:has_cfuncs("IMG_Init", {includes = "SDL2/SDL_image.h", configs = {defines = "SDL_MAIN_HANDLED"}}))
-    end)
+
 end

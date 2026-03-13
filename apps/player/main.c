@@ -11,26 +11,18 @@
 
 #include <stdio.h>
 #include <unistd.h>
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 
 #define rtt_screen_width 480
-#define rtt_screen_height 272
+#define rtt_screen_height 800
 
 
 int main (int argc, char *argv[]) 
 {
     int ret = -1;
-    AVFormatContext *pFormatCtx = NULL; 
     int videoStream;
-    AVCodecParameters *pCodecParameters = NULL; 
-    AVCodecContext *pCodecCtx = NULL;
-    AVCodec *pCodec = NULL;
-    AVFrame *pFrame = NULL;
-    AVPacket packet;
+
     
 
     SDL_Rect rect;
@@ -57,57 +49,6 @@ int main (int argc, char *argv[])
         return -1;
     }
 
-    // 打开输入文件
-    if (avformat_open_input(&pFormatCtx, argv[1], NULL, NULL) != 0) 
-    {
-        printf("Couldn't open video file!: %s\n", argv[1]);
-        goto __exit; 
-    }
-
-    // 找到视频流
-    videoStream = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-    if (videoStream == -1) 
-    {
-        printf("Din't find a video stream!\n");
-        goto __exit;// Didn't find a video stream
-    }
-
-    // 流参数
-    pCodecParameters = pFormatCtx->streams[videoStream]->codecpar;
-
-    // 获取解码器
-    pCodec = avcodec_find_decoder(pCodecParameters->codec_id);
-    if (pCodec == NULL) 
-    {
-        printf("Unsupported codec!\n");
-        goto __exit; // Codec not found
-    }
-
-    // 初始化一个编解码上下文
-    pCodecCtx = avcodec_alloc_context3(pCodec);
-    if (avcodec_parameters_to_context(pCodecCtx, pCodecParameters) != 0) 
-    {
-        printf("Couldn't copy codec context\n");
-        goto __exit;// Error copying codec context
-    }
-
-    // 打开解码器
-    if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) 
-    {
-        printf("Failed to open decoder!\n");
-        goto __exit; // Could not open codec
-    }
-
-    // Allocate video frame
-    pFrame = av_frame_alloc();
-    if (NULL == pFrame) {
-        printf("av_frame_alloc error\n");
-        goto __exit;
-    }
-
-    w_width = pCodecCtx->width;
-    w_height = pCodecCtx->height;
-
     // 创建窗口
     win = SDL_CreateWindow("Media Player",
                             SDL_WINDOWPOS_UNDEFINED,
@@ -127,7 +68,34 @@ int main (int argc, char *argv[])
         printf("Failed to create Renderer by SDL\n");
         goto __exit;
     }
+#if 1
+    texture = IMG_LoadTexture(renderer, "/root/test.bmp");
+    if (!texture) {
+        SDL_Log("Couldn't load \n");
+        return -1;
+    }
 
+    int w, h;
+    SDL_QueryTexture(texture, NULL, NULL, &w, &h);
+
+    printf("w = %d, h = %d\n", w, h);
+    rect.x = 0;
+    rect.y = 0;
+    rect.w = w;
+    rect.h = h;
+    /* Display the image */
+    SDL_RenderCopy(renderer, texture, NULL, &rect);
+    SDL_RenderPresent(renderer);
+#endif 
+while (1) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                goto __exit;
+            }
+        }
+    }
+#if 0
     // 创建纹理
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_IYUV,
                                 SDL_TEXTUREACCESS_STREAMING,
@@ -138,62 +106,35 @@ int main (int argc, char *argv[])
         goto __exit;
     }
 
-    int receive_frame_ret = 0;
+    const int centerX = 100; // 窗口中心 X 坐标
+    const int centerY = 75; // 窗口中心 Y 坐标
+    const int crossSize = 20; // 十字线长度（半长）
+    const SDL_Color crossColor = {255, 0, 0, 255}; // 红色
 
-    // 读取数据
-    while (av_read_frame(pFormatCtx, &packet) >= 0) 
-    {
-        if (packet.stream_index == videoStream) 
-        {
-            // 解码
-            avcodec_send_packet(pCodecCtx, &packet);
-            while (receive_frame_ret = avcodec_receive_frame(pCodecCtx, pFrame) == 0) 
-            {
-                if (receive_frame_ret < 0) {
-                    printf("avcodec_receive_frame error: %d\n",receive_frame_ret);
-                    goto __exit;
-                }
-                SDL_UpdateYUVTexture(texture, NULL,
-                                    pFrame->data[0], pFrame->linesize[0],
-                                    pFrame->data[1], pFrame->linesize[1],
-                                    pFrame->data[2], pFrame->linesize[2]);
-
-                // set size of Window
-                rect.x = 0;
-                rect.y = 0;
-                rect.w = pCodecCtx->width;
-                rect.h = pCodecCtx->height;
-
-                SDL_RenderClear(renderer);
-                SDL_RenderCopy(renderer, texture, NULL, &rect);
-                SDL_RenderPresent(renderer);
-            }
-        }
-
-        av_packet_unref(&packet);
-    }
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+// 绘制十字线
+        SDL_SetRenderDrawColor(renderer, crossColor.r, crossColor.g, crossColor.b, crossColor.a);
+        
+        // 水平线（左到右）
+        SDL_RenderDrawLine(
+            renderer,
+            centerX - crossSize, centerY, // 起点
+            centerX + crossSize, centerY  // 终点
+        );
+        
+        // 垂直线（上到下）
+        SDL_RenderDrawLine(
+            renderer,
+            centerX, centerY - crossSize, // 起点
+            centerX, centerY + crossSize  // 终点
+        );
+ 
+        // 更新屏幕
+        SDL_RenderPresent(renderer);
+#endif
 
     __exit:
-
-    if (pFrame) 
-    {
-        av_frame_free(&pFrame);
-    }
-
-    if (pCodecCtx) 
-    {
-        avcodec_close(pCodecCtx);
-    }
-
-    if (pCodecParameters) 
-    {
-        avcodec_parameters_free(&pCodecParameters);
-    }
-
-    if (pFormatCtx) 
-    {
-        avformat_close_input(&pFormatCtx);
-    }
 
     if (win) 
     {

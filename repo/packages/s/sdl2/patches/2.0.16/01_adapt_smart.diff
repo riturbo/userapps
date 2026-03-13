@@ -299,21 +299,10 @@ index 0000000..1225b72
 +#endif
 diff --git a/src/video/rtt/SDL_rttkeyboard.c b/src/video/rtt/SDL_rttkeyboard.c
 new file mode 100644
-index 0000000..0f98ddd
+index 0000000..2ec33f1
 --- /dev/null
 +++ b/src/video/rtt/SDL_rttkeyboard.c
-@@ -0,0 +1,47 @@
-+/*
-+ * Copyright (c) 2006-2021, RT-Thread Development Team
-+ *
-+ * SPDX-License-Identifier: GPL-2.0
-+ *
-+ * Change Logs:
-+ * Date           Author       Notes
-+ * 2023-02-12     xqyjlj       adapt rt-smart
-+ * 2023-09-21     zbtrs        upgrade version
-+ */
-+
+@@ -0,0 +1,226 @@
 +#include "../../SDL_internal.h"
 +
 +#include "../../events/SDL_keyboard_c.h"
@@ -322,31 +311,221 @@ index 0000000..0f98ddd
 +
 +#if SDL_VIDEO_DRIVER_RTT
 +
++#include <dfs_poll.h>
++#include <include/drivers/input_uapi.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <unistd.h>
++
++#define RTT_KBD_MAX_DEVICES 8
++#define RTT_KBD_EVENTS_PER_PUMP 16
++
++static int keyboard_fd = -1;
++
++static SDL_Scancode RTT_TranslateSet2Scancode(int keycode)
++{
++    switch (keycode)
++    {
++    case 0x01: return SDL_SCANCODE_F9;
++    case 0x03: return SDL_SCANCODE_F5;
++    case 0x04: return SDL_SCANCODE_F3;
++    case 0x05: return SDL_SCANCODE_F1;
++    case 0x06: return SDL_SCANCODE_F2;
++    case 0x07: return SDL_SCANCODE_F12;
++    case 0x09: return SDL_SCANCODE_F10;
++    case 0x0A: return SDL_SCANCODE_F8;
++    case 0x0B: return SDL_SCANCODE_F6;
++    case 0x0C: return SDL_SCANCODE_F4;
++    case 0x0D: return SDL_SCANCODE_TAB;
++    case 0x11: return SDL_SCANCODE_LALT;
++    case 0x12: return SDL_SCANCODE_LSHIFT;
++    case 0x14: return SDL_SCANCODE_LCTRL;
++    case 0x15: return SDL_SCANCODE_Q;
++    case 0x16: return SDL_SCANCODE_1;
++    case 0x1A: return SDL_SCANCODE_Z;
++    case 0x1B: return SDL_SCANCODE_S;
++    case 0x1C: return SDL_SCANCODE_A;
++    case 0x1D: return SDL_SCANCODE_W;
++    case 0x1E: return SDL_SCANCODE_2;
++    case 0x21: return SDL_SCANCODE_C;
++    case 0x22: return SDL_SCANCODE_X;
++    case 0x23: return SDL_SCANCODE_D;
++    case 0x24: return SDL_SCANCODE_E;
++    case 0x25: return SDL_SCANCODE_4;
++    case 0x26: return SDL_SCANCODE_3;
++    case 0x29: return SDL_SCANCODE_SPACE;
++    case 0x2A: return SDL_SCANCODE_V;
++    case 0x2B: return SDL_SCANCODE_F;
++    case 0x2C: return SDL_SCANCODE_T;
++    case 0x2D: return SDL_SCANCODE_R;
++    case 0x2E: return SDL_SCANCODE_5;
++    case 0x31: return SDL_SCANCODE_N;
++    case 0x32: return SDL_SCANCODE_B;
++    case 0x33: return SDL_SCANCODE_H;
++    case 0x34: return SDL_SCANCODE_G;
++    case 0x35: return SDL_SCANCODE_Y;
++    case 0x36: return SDL_SCANCODE_6;
++    case 0x3A: return SDL_SCANCODE_M;
++    case 0x3B: return SDL_SCANCODE_J;
++    case 0x3C: return SDL_SCANCODE_U;
++    case 0x3D: return SDL_SCANCODE_7;
++    case 0x3E: return SDL_SCANCODE_8;
++    case 0x41: return SDL_SCANCODE_COMMA;
++    case 0x42: return SDL_SCANCODE_K;
++    case 0x43: return SDL_SCANCODE_I;
++    case 0x44: return SDL_SCANCODE_O;
++    case 0x45: return SDL_SCANCODE_0;
++    case 0x46: return SDL_SCANCODE_9;
++    case 0x49: return SDL_SCANCODE_PERIOD;
++    case 0x4A: return SDL_SCANCODE_SLASH;
++    case 0x4B: return SDL_SCANCODE_L;
++    case 0x4C: return SDL_SCANCODE_SEMICOLON;
++    case 0x4D: return SDL_SCANCODE_P;
++    case 0x4E: return SDL_SCANCODE_MINUS;
++    case 0x52: return SDL_SCANCODE_APOSTROPHE;
++    case 0x54: return SDL_SCANCODE_LEFTBRACKET;
++    case 0x55: return SDL_SCANCODE_EQUALS;
++    case 0x58: return SDL_SCANCODE_CAPSLOCK;
++    case 0x59: return SDL_SCANCODE_RSHIFT;
++    case 0x5A: return SDL_SCANCODE_RETURN;
++    case 0x5B: return SDL_SCANCODE_RIGHTBRACKET;
++    case 0x5D: return SDL_SCANCODE_BACKSLASH;
++    case 0x66: return SDL_SCANCODE_BACKSPACE;
++    case 0x69: return SDL_SCANCODE_KP_1;
++    case 0x6A: return SDL_SCANCODE_KP_PLUS;
++    case 0x6B: return SDL_SCANCODE_KP_4;
++    case 0x6C: return SDL_SCANCODE_KP_7;
++    case 0x70: return SDL_SCANCODE_KP_0;
++    case 0x71: return SDL_SCANCODE_KP_PERIOD;
++    case 0x72: return SDL_SCANCODE_KP_2;
++    case 0x73: return SDL_SCANCODE_KP_5;
++    case 0x74: return SDL_SCANCODE_KP_6;
++    case 0x75: return SDL_SCANCODE_KP_8;
++    case 0x76: return SDL_SCANCODE_ESCAPE;
++    case 0x77: return SDL_SCANCODE_NUMLOCKCLEAR;
++    case 0x78: return SDL_SCANCODE_F11;
++    case 0x79: return SDL_SCANCODE_KP_PLUS;
++    case 0x7A: return SDL_SCANCODE_KP_3;
++    case 0x7B: return SDL_SCANCODE_KP_MINUS;
++    case 0x7C: return SDL_SCANCODE_KP_MULTIPLY;
++    case 0x7D: return SDL_SCANCODE_KP_9;
++    case 0x7E: return SDL_SCANCODE_SCROLLLOCK;
++    case 0x83: return SDL_SCANCODE_F7;
++    default:   return SDL_SCANCODE_UNKNOWN;
++    }
++}
++
++static int RTT_OpenKeyboardDevice(void)
++{
++    int i;
++
++    for (i = 0; i < RTT_KBD_MAX_DEVICES; ++i)
++    {
++        char dev_path[16];
++        int fd;
++
++        SDL_snprintf(dev_path, sizeof(dev_path), "/dev/input%d", i);
++        fd = open(dev_path, O_RDONLY | O_NONBLOCK);
++        if (fd >= 0)
++        {
++            return fd;
++        }
++    }
++
++    return -1;
++}
++
 +void RTT_InitKeyboard(void)
 +{
-+    // TODO
++    SDL_Keycode keymap[SDL_NUM_SCANCODES];
++
++    SDL_GetDefaultKeymap(keymap);
++    SDL_SetKeymap(0, keymap, SDL_NUM_SCANCODES);
++
++    keyboard_fd = RTT_OpenKeyboardDevice();
 +}
 +
 +int RTT_HeldKeyboardCode(int index)
 +{
-+    // TODO
++
 +    return 0;
 +}
 +
 +int RTT_GetKeyboardCode(int keycode)
 +{
-+    // TODO
-+    return 0;
++    return (int)RTT_TranslateSet2Scancode(keycode);
 +}
 +
 +void RTT_PollKeyboard(void)
 +{
-+    // TODO
++    struct input_event event;
++    struct pollfd pfd;
++    int i;
++
++    if (keyboard_fd < 0)
++    {
++        return;
++    }
++
++    pfd.fd = keyboard_fd;
++    pfd.events = POLLIN;
++    pfd.revents = 0;
++
++    if (poll(&pfd, 1, 0) <= 0)
++    {
++        return;
++    }
++
++    if (!(pfd.revents & (POLLIN | POLLERR | POLLHUP)))
++    {
++        return;
++    }
++
++    for (i = 0; i < RTT_KBD_EVENTS_PER_PUMP; ++i)
++    {
++        ssize_t rc;
++        SDL_Scancode scancode;
++
++        rc = read(keyboard_fd, &event, sizeof(event));
++        if (rc < 0)
++        {
++            if (errno == EAGAIN || errno == EWOULDBLOCK)
++            {
++                break;
++            }
++
++            close(keyboard_fd);
++            keyboard_fd = -1;
++            break;
++        }
++
++        if (rc != sizeof(event))
++        {
++            break;
++        }
++
++        if (event.type != EV_KEY)
++        {
++            continue;
++        }
++
++        scancode = RTT_TranslateSet2Scancode(event.code);
++        if (scancode == SDL_SCANCODE_UNKNOWN)
++        {
++            continue;
++        }
++
++        SDL_SendKeyboardKey(event.value ? SDL_PRESSED : SDL_RELEASED, scancode);
++    }
 +}
 +
 +void RTT_QuitKeyboard(void)
 +{
-+    // TODO
++    if (keyboard_fd >= 0)
++    {
++        close(keyboard_fd);
++        keyboard_fd = -1;
++    }
 +}
 +
 +#endif
@@ -1052,10 +1231,10 @@ index 0000000..d21c344
 +#endif
 diff --git a/src/video/rtt/SDL_rttvideo.c b/src/video/rtt/SDL_rttvideo.c
 new file mode 100755
-index 0000000..17001f1
+index 0000000..1d414cb
 --- /dev/null
 +++ b/src/video/rtt/SDL_rttvideo.c
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,128 @@
 +/*
 + * Copyright (c) 2006-2021, RT-Thread Development Team
 + *
@@ -1096,7 +1275,7 @@ index 0000000..17001f1
 +#if SDL_VIDEO_DRIVER_RTT_TOUCH
 +    RTT_PollTouch();
 +#endif
-+    // RTT_PollKeyboard(); //TODO
++    RTT_PollKeyboard();
 +    // RTT_PollMouse(); //TODO
 +}
 +
@@ -1165,6 +1344,7 @@ index 0000000..17001f1
 +#if SDL_VIDEO_DRIVER_RTT_TOUCH
 +    RTT_InitTouch();
 +#endif
++    RTT_InitKeyboard();
 +    return 0;
 +}
 +
@@ -1175,6 +1355,7 @@ index 0000000..17001f1
 +
 +void RTT_VideoQuit(_THIS)
 +{
++    RTT_QuitKeyboard();
 +    RTT_screenQuit();
 +#if SDL_VIDEO_DRIVER_RTT_TOUCH
 +    RTT_QuitTouch();

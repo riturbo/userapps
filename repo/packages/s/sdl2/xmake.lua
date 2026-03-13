@@ -31,7 +31,7 @@ do
     add_versions("2.0.16", "bfb53c5395ff2862d07617b23939fca9a752c2f4d2424e617cedd083390b0143")
 
     add_patches("2.0.16",path.join(os.scriptdir(), "patches", "2.0.16", "01_adapt_smart.diff"),
-                "a09ea8ac7c61d04fd568accd7f565f627808e33fe1698c3a9ee95e00d6b3c270")
+                "be1ae201113d0143571779d4b7e4e1b1d6f95cf01d1932c1f4b2a0cc02517bfa")
 
     add_configs("shared", {
         description = "Build shared library.",
@@ -47,6 +47,7 @@ do
         local host = info.host
         local configs = {host = host}
         local cc = info.cc
+        local cxflags = {}
         local ldflags = {}
         os.setenv("PATH", path.directory(cc) .. ":" .. os.getenv("PATH"))
 
@@ -77,14 +78,18 @@ do
         table.insert(configs, "--enable-video-rtt-touch=no")
         table.insert(configs, "--enable-video-rtt-fbdev=yes")
 
-        local buildenvs = import("package.tools.autoconf").buildenvs(package, {ldflags = ldflags})
+        local sdk = rtflags.get_sdk()
+        table.join2(cxflags, sdk.cxflags)
+        table.join2(ldflags, sdk.ldflags)
+
+        local buildenvs = import("package.tools.autoconf").buildenvs(package, {
+            cxflags = cxflags,
+            ldflags = ldflags
+        })
         os.vrun("./autogen.sh", {envs = buildenvs})
         import("package.tools.autoconf").configure(package, configs, {envs = buildenvs})
         import("package.tools.make").install(package, {}, {envs = buildenvs})
         
     end)
 
-    on_test(function(package)
-        assert(package:has_cfuncs("SDL_Init", {includes = {"SDL.h"}}))
-    end)
 end

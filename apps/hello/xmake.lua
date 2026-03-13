@@ -24,6 +24,7 @@ add_rules("mode.debug", "mode.release")
 
 target("hello")
 do
+    add_rules("rt.sdk")
     add_files("*.c")
 end
 target_end()

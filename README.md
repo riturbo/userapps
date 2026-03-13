@@ -54,6 +54,9 @@ xmake 是一个基于 Lua 的轻量级跨平台构建工具，使用 xmake.lua �
    cd apps
    xmake f -a aarch64 # 配置为 aarch64平台，如果不执行该条指令进行配置，则默认为 aarch64
    xmake -j$(nproc)
+
+   xmake build celeste
+   xmake require --force --build --verbose sdl2
    ```
 
    目前支持的平台：arm、aarch64、riscv64gc。
